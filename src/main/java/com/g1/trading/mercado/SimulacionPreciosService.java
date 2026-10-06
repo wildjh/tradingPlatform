@@ -7,28 +7,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Paso 3 · Servicio de dominio.
+ * Servicio de dominio de la simulación periódica de precios (HU-08).
  * <p>
- * HU-08: el administrador simula la actualización periódica de precios
- * para que el mercado se sienta vivo. La regla no cabe dentro de un solo
- * {@link Instrumento}: el mismo factor y la misma marca de tiempo se aplican
- * a todo el catálogo, y o se actualizan todos o no se actualiza ninguno.
- * <p>
- * No es un servicio de Spring. No abre transacciones ni habla con otros contextos.
+ * El mismo factor y la misma marca de tiempo se aplican a todo el catálogo:
+ * la regla no pertenece a un solo Instrumento. Si una cotización nueva no es
+ * válida, no se actualiza ninguna. No conoce órdenes ni portafolio, y no usa Spring.
  */
-public final class SimulacionPrecioService {
+public final class SimulacionPreciosService {
 
     private static final int DECIMALES = 4;
 
     /**
-     * Calcula la cotización siguiente de cada instrumento y, solo si todas son válidas,
-     * las registra en la raíz correspondiente.
-     *
-     * @param catalogo         instrumentos del mercado en este instante
-     * @param factorVariacion  multiplicador mayor a cero (1.02 es +2 %)
-     * @param momento          marca de tiempo común de esta simulación
+     * @param catalogo        instrumentos a actualizar
+     * @param factorVariacion multiplicador mayor a cero (1.02 es +2 %)
+     * @param momento         marca de tiempo común de esta simulación
+     * @param generadoPor     quién dispara la simulación, como id de texto
      */
-    public void simular(List<Instrumento> catalogo, BigDecimal factorVariacion, Instant momento) {
+    public void simular(List<Instrumento> catalogo, BigDecimal factorVariacion,
+                        Instant momento, String generadoPor) {
         if (catalogo == null || catalogo.isEmpty()) {
             throw new IllegalArgumentException("El catálogo a simular no puede estar vacío");
         }
@@ -38,26 +34,30 @@ public final class SimulacionPrecioService {
         if (momento == null) {
             throw new IllegalArgumentException("La simulación necesita una marca de tiempo");
         }
+        if (generadoPor == null || generadoPor.isBlank()) {
+            throw new IllegalArgumentException("La simulación debe indicar quién la generó");
+        }
 
-        // Primera pasada: validar todo el catálogo antes de tocar un agregado.
         List<PrecioCotizado> nuevasCotizaciones = new ArrayList<>();
         for (Instrumento instrumento : catalogo) {
             if (instrumento == null) {
                 throw new IllegalArgumentException("El catálogo no puede contener un instrumento nulo");
             }
-            if (!momento.isAfter(instrumento.cotizacionActual().momento())) {
+            PrecioCotizado actual = instrumento.obtenerCotizacionActual().precio();
+            if (!momento.isAfter(actual.momento())) {
                 throw new IllegalArgumentException(
-                        "La simulación de " + instrumento.simbolo()
+                        "La simulación de " + instrumento.id().valor()
                                 + " debe ser posterior a su última cotización");
             }
-            BigDecimal nuevoValor = instrumento.cotizacionActual().valor()
+            BigDecimal nuevoValor = actual.valor()
                     .multiply(factorVariacion)
                     .setScale(DECIMALES, RoundingMode.HALF_UP);
             nuevasCotizaciones.add(new PrecioCotizado(nuevoValor, momento));
         }
 
         for (int i = 0; i < catalogo.size(); i++) {
-            catalogo.get(i).registrarCotizacion(nuevasCotizaciones.get(i));
+            catalogo.get(i).actualizarPrecio(
+                    nuevasCotizaciones.get(i), OrigenCotizacion.SIMULACION, generadoPor);
         }
     }
 }
