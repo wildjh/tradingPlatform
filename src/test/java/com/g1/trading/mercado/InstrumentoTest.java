@@ -2,6 +2,8 @@ package com.g1.trading.mercado;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -11,76 +13,88 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class InstrumentoTest {
 
+    private final InstrumentoFactory factory = new InstrumentoFactory();
     private final Instant apertura = Instant.parse("2026-10-06T13:00:00Z");
-    private final PrecioCotizado inicial = new PrecioCotizado(new BigDecimal("80"), apertura);
 
     @Test
-    void naceConLaCotizacionInicialDentroDelHistorico() {
-        Instrumento instrumento = new Instrumento("AAPL", "Apple", TipoInstrumento.ACCION, inicial);
+    void siempreNaceConUnaCotizacionValida() {
+        Instrumento instrumento = apple();
 
-        assertThat(instrumento.simbolo()).isEqualTo("AAPL");
-        assertThat(instrumento.cotizacionActual()).isEqualTo(inicial);
-        assertThat(instrumento.historico()).containsExactly(inicial);
+        Cotizacion actual = instrumento.obtenerCotizacionActual();
+        assertThat(actual.precio().valor()).isEqualByComparingTo("80");
+        assertThat(instrumento.consultarHistorico().cotizaciones()).containsExactly(actual);
     }
 
     @Test
-    void laNuevaCotizacionDebeSerPosteriorALaUltima() {
-        Instrumento instrumento = new Instrumento("AAPL", "Apple", TipoInstrumento.ACCION, inicial);
+    void actualizarPrecioExigeUnMomentoPosteriorYDejaTrazabilidad() {
+        Instrumento instrumento = apple();
         Instant despues = apertura.plusSeconds(60);
 
-        instrumento.registrarCotizacion(new PrecioCotizado(new BigDecimal("81"), despues));
+        instrumento.actualizarPrecio(
+                new PrecioCotizado(new BigDecimal("81"), despues),
+                OrigenCotizacion.SIMULACION,
+                "admin-mercado");
 
-        assertThat(instrumento.cotizacionActual().valor()).isEqualByComparingTo("81");
-        assertThat(instrumento.historico()).hasSize(2);
+        Cotizacion actual = instrumento.obtenerCotizacionActual();
+        assertThat(actual.precio().valor()).isEqualByComparingTo("81");
+        assertThat(actual.precio().momento()).isEqualTo(despues);
+        assertThat(actual.origen()).isEqualTo(OrigenCotizacion.SIMULACION);
+        assertThat(actual.generadoPor()).isEqualTo("admin-mercado");
+        assertThat(instrumento.consultarHistorico().cotizaciones()).hasSize(2);
     }
 
     @Test
     void rechazaUnaCotizacionConLaMismaMarcaDeTiempoOAnterior() {
-        Instrumento instrumento = new Instrumento("AAPL", "Apple", TipoInstrumento.ACCION, inicial);
+        Instrumento instrumento = apple();
 
-        assertThatThrownBy(() -> instrumento.registrarCotizacion(
-                new PrecioCotizado(new BigDecimal("81"), apertura)))
+        assertThatThrownBy(() -> instrumento.actualizarPrecio(
+                new PrecioCotizado(new BigDecimal("81"), apertura),
+                OrigenCotizacion.SIMULACION,
+                "admin-mercado"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("posterior");
 
-        assertThatThrownBy(() -> instrumento.registrarCotizacion(
-                new PrecioCotizado(new BigDecimal("81"), apertura.minusSeconds(1))))
+        assertThatThrownBy(() -> instrumento.actualizarPrecio(
+                new PrecioCotizado(new BigDecimal("81"), apertura.minusSeconds(1)),
+                OrigenCotizacion.SIMULACION,
+                "admin-mercado"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("posterior");
 
-        assertThat(instrumento.historico()).hasSize(1);
+        assertThat(instrumento.consultarHistorico().cotizaciones()).hasSize(1);
     }
 
     @Test
-    void elHistoricoDevueltoNoPermiteAlterarElAgregado() {
-        Instrumento instrumento = new Instrumento("AAPL", "Apple", TipoInstrumento.ACCION, inicial);
-        List<PrecioCotizado> consulta = instrumento.historico();
+    void consultarHistoricoNoPermiteAlterarElAgregado() {
+        Instrumento instrumento = apple();
+        List<Cotizacion> consulta = instrumento.consultarHistorico().cotizaciones();
 
-        assertThatThrownBy(() -> consulta.add(new PrecioCotizado(new BigDecimal("90"), apertura.plusSeconds(1))))
+        assertThatThrownBy(() -> consulta.add(instrumento.obtenerCotizacionActual()))
                 .isInstanceOf(UnsupportedOperationException.class);
-        assertThat(instrumento.historico()).hasSize(1);
+        assertThat(instrumento.consultarHistorico().cotizaciones()).hasSize(1);
     }
 
     @Test
-    void dosInstrumentosConElMismoSimboloSonLaMismaEntidad() {
-        Instrumento uno = new Instrumento("AAPL", "Apple", TipoInstrumento.ACCION, inicial);
-        Instrumento otro = new Instrumento(
+    void dosInstrumentosConElMismoIdSonLaMismaEntidad() {
+        Instrumento uno = apple();
+        Instrumento otro = factory.registrar(
                 "AAPL", "Apple Inc.", TipoInstrumento.ACCION,
-                new PrecioCotizado(new BigDecimal("90"), apertura.plusSeconds(10)));
+                new BigDecimal("90"), apertura.plusSeconds(10), "otro-admin");
 
         assertThat(uno).isEqualTo(otro);
         assertThat(uno.hashCode()).isEqualTo(otro.hashCode());
     }
 
     @Test
-    void rechazaSimboloNombreOCotizacionInvalidos() {
-        assertThatThrownBy(() -> new Instrumento("aapl", "Apple", TipoInstrumento.ACCION, inicial))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new Instrumento("AAPL", "   ", TipoInstrumento.ACCION, inicial))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new Instrumento("AAPL", "Apple", null, inicial))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new Instrumento("AAPL", "Apple", TipoInstrumento.ACCION, null))
-                .isInstanceOf(IllegalArgumentException.class);
+    void noHayConstructorPublico() {
+        for (Constructor<?> constructor : Instrumento.class.getConstructors()) {
+            assertThat(Modifier.isPublic(constructor.getModifiers())).isFalse();
+        }
+        assertThat(Instrumento.class.getConstructors()).isEmpty();
+    }
+
+    private Instrumento apple() {
+        return factory.registrar(
+                "AAPL", "Apple", TipoInstrumento.ACCION, new BigDecimal("80"), apertura, "admin-mercado");
     }
 }
