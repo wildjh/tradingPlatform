@@ -1,34 +1,28 @@
 package com.g1.trading.mercado;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 
 /**
- * Paso 4 · Raíz del agregado Instrumento.
+ * Raíz del agregado de Mercado.
  * <p>
- * El agregado es el instrumento junto con su cotización actual y su histórico.
- * Quien quiera leer o cambiar precios pasa por esta raíz: el histórico no se
- * edita desde afuera.
+ * Controla la cotización actual y el histórico de precios. Un instrumento
+ * siempre tiene al menos un {@link PrecioCotizado} válido. La consulta
+ * (HU-01 y HU-02) no necesita al motor de emparejamiento: no hay ninguna
+ * referencia a órdenes ni a portafolio.
  * <p>
- * Identidad publicada a otros contextos: {@link #simbolo()}, un String.
- * Esta clase no guarda objetos de Orden ni de Portafolio.
- * <p>
- * La construcción pública está en {@link InstrumentoFactory}. El constructor
- * queda visible solo en el paquete para que la raíz siga rechazando un estado
- * imposible aunque alguien la arme a mano.
+ * La única forma de obtener una instancia es {@link InstrumentoFactory}.
+ * El constructor no es público.
  */
-public class Instrumento {
+public final class Instrumento {
 
-    private final String simbolo;
+    private final InstrumentoId id;
     private final String nombre;
     private final TipoInstrumento tipo;
-    private PrecioCotizado cotizacionActual;
-    private final List<PrecioCotizado> historico = new ArrayList<>();
+    private final HistoricoPrecios historico;
 
-    Instrumento(String simbolo, String nombre, TipoInstrumento tipo, PrecioCotizado cotizacionInicial) {
-        if (simbolo == null || !simbolo.matches("[A-Z]{1,5}")) {
-            throw new IllegalArgumentException("El símbolo debe tener de 1 a 5 letras mayúsculas");
+    Instrumento(InstrumentoId id, String nombre, TipoInstrumento tipo, Cotizacion cotizacionInicial) {
+        if (id == null) {
+            throw new IllegalArgumentException("El instrumento necesita un id");
         }
         if (nombre == null || nombre.isBlank()) {
             throw new IllegalArgumentException("El instrumento necesita un nombre");
@@ -39,32 +33,25 @@ public class Instrumento {
         if (cotizacionInicial == null) {
             throw new IllegalArgumentException("El instrumento nace con una cotización inicial");
         }
-        this.simbolo = simbolo;
+        this.id = id;
         this.nombre = nombre.trim();
         this.tipo = tipo;
-        this.cotizacionActual = cotizacionInicial;
-        this.historico.add(cotizacionInicial);
+        this.historico = new HistoricoPrecios(cotizacionInicial);
     }
 
     /**
-     * Evento de dominio: precio cotizado actualizado.
-     * El histórico solo crece, y cada marca de tiempo es posterior a la anterior.
+     * Registra un precio nuevo. El histórico solo crece y cada momento es posterior al anterior.
+     *
+     * @param nuevoPrecio precio ya validado (mayor a cero, con marca de tiempo)
+     * @param origen      qué generó el cambio (carga o simulación)
+     * @param generadoPor quién lo generó, como id de texto
      */
-    public void registrarCotizacion(PrecioCotizado nueva) {
-        if (nueva == null) {
-            throw new IllegalArgumentException("La cotización nueva no puede ser nula");
-        }
-        if (!nueva.momento().isAfter(cotizacionActual.momento())) {
-            throw new IllegalArgumentException(
-                    "La nueva cotización de " + simbolo + " debe ser posterior a " + cotizacionActual.momento());
-        }
-        this.cotizacionActual = nueva;
-        this.historico.add(nueva);
+    public void actualizarPrecio(PrecioCotizado nuevoPrecio, OrigenCotizacion origen, String generadoPor) {
+        historico.registrar(new Cotizacion(nuevoPrecio, origen, generadoPor));
     }
 
-    /** Id que Órdenes y Portafolio pueden guardar. No es el objeto completo. */
-    public String simbolo() {
-        return simbolo;
+    public InstrumentoId id() {
+        return id;
     }
 
     public String nombre() {
@@ -75,13 +62,14 @@ public class Instrumento {
         return tipo;
     }
 
-    public PrecioCotizado cotizacionActual() {
-        return cotizacionActual;
+    /** HU-01: precio vigente, con su trazabilidad. */
+    public Cotizacion obtenerCotizacionActual() {
+        return historico.actual();
     }
 
-    /** Copia defensiva: HU-02 consulta el histórico sin poder alterarlo. */
-    public List<PrecioCotizado> historico() {
-        return List.copyOf(historico);
+    /** HU-02: serie completa. La lista interna no se puede reemplazar desde afuera. */
+    public HistoricoPrecios consultarHistorico() {
+        return historico;
     }
 
     @Override
@@ -92,11 +80,11 @@ public class Instrumento {
         if (!(otro instanceof Instrumento instrumento)) {
             return false;
         }
-        return simbolo.equals(instrumento.simbolo);
+        return id.equals(instrumento.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(simbolo);
+        return Objects.hash(id);
     }
 }
