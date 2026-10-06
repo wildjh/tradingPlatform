@@ -47,4 +47,4 @@ Anotación de David Cruz (dueño propuesto): Las referencias a Instrumento u Ord
 3. Dev 3 - David Cruz: Subdominio de Portafolio
 
 ## 5. Repositorio de GitHub
-
+https://github.com/wildjh/tradingPlatform
