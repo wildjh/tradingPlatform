@@ -2,7 +2,8 @@ package com.g1.trading.config;
 
 import com.g1.trading.mercado.aplicacion.InstrumentoFactory;
 import com.g1.trading.mercado.aplicacion.InstrumentoService;
-import com.g1.trading.mercado.aplicacion.RepositorioInstrumentosFalso;
+import com.g1.trading.mercado.aplicacion.RepositorioInstrumentos;
+import com.g1.trading.mercado.dominio.Instrumento;
 import com.g1.trading.mercado.dominio.SimulacionPreciosService;
 import com.g1.trading.ordenes.OrdenService;
 import com.g1.trading.portafolio.PortafolioRepositoryEnMemoria;
@@ -13,10 +14,40 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConfigTest {
+
+    private static class RepositorioInstrumentosEnMemoria implements RepositorioInstrumentos {
+        private final Map<String, Instrumento> almacen = new LinkedHashMap<>();
+
+        @Override
+        public List<Instrumento> listarTodos() {
+            return new ArrayList<>(almacen.values());
+        }
+
+        @Override
+        public Optional<Instrumento> buscarPorSimbolo(String simbolo) {
+            return Optional.ofNullable(almacen.get(simbolo));
+        }
+
+        @Override
+        public boolean existeSimbolo(String simbolo) {
+            return almacen.containsKey(simbolo);
+        }
+
+        @Override
+        public Instrumento guardar(Instrumento instrumento) {
+            almacen.put(instrumento.id().valor(), instrumento);
+            return instrumento;
+        }
+    }
 
     @Test
     void authControllerAutenticaUsuarioValidoYRechazaCredencialesInvalidas() {
@@ -81,7 +112,7 @@ class ConfigTest {
     @Test
     void dataSeederPrecargaCatalogoYPosicionesDeFormaIdempotente() {
         InstrumentoService instrumentoService = new InstrumentoService(
-                new RepositorioInstrumentosFalso(),
+                new RepositorioInstrumentosEnMemoria(),
                 new InstrumentoFactory(),
                 new SimulacionPreciosService()
         );
