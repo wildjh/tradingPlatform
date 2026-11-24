@@ -165,4 +165,16 @@ public final class Orden {
     public int hashCode() {
         return Objects.hash(id);
     }
+
+    public static Orden reconstruir(String id, String inversionistaId, String instrumentoId,
+            LadoOrden lado, TipoOrden tipo, BigDecimal cantidad, PrecioLimite precioLimite, EstadoOrden estado)
+    {
+        Orden orden = new Orden(id, inversionistaId, instrumentoId, lado, tipo, cantidad, precioLimite);
+        if (estado == EstadoOrden.EJECUTADA) {
+            orden.ejecutar();
+        } else if (estado == EstadoOrden.CANCELADA) {
+            orden.cancelar();
+        }
+        return orden;
+    }
 }

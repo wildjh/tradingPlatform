@@ -159,20 +159,42 @@ class EmparejamientoServiceTest {
     }
 
     @Test
-    void indicaQueElCruceAMercadoAunNoEstaImplementado() {
-        Orden compra = OrdenFactory.crearMercado(
-                "comprador-1",
-                "instrumento-1",
-                LadoOrden.COMPRA,
-                new BigDecimal("5")
+    void emparejaOrdenesLimitesYGeneraTransaccion() {
+        Orden compra = crearOrden(
+                "instrumento-1", LadoOrden.COMPRA, "100"
         );
         Orden venta = crearOrden(
                 "instrumento-1", LadoOrden.VENTA, "90"
         );
 
-        assertThrows(
-                UnsupportedOperationException.class,
-                () -> servicio.sonCompatibles(compra, venta)
+        Transaccion tx = servicio.emparejar(compra, venta, null);
+
+        assertAll(
+                () -> assertEquals(EstadoOrden.EJECUTADA, compra.estado()),
+                () -> assertEquals(EstadoOrden.EJECUTADA, venta.estado()),
+                () -> assertEquals(compra.id(), tx.ordenCompraId()),
+                () -> assertEquals(venta.id(), tx.ordenVentaId()),
+                () -> assertEquals(0, new BigDecimal("90").compareTo(tx.precioEjecucion())),
+                () -> assertEquals(0, new BigDecimal("5").compareTo(tx.cantidad())),
+                () -> assertNotNull(tx.ejecutadaEn())
         );
+    }
+
+    @Test
+    void emparejaOrdenMercadoContraOrdenLimite() {
+        Orden compraMercado = OrdenFactory.crearMercado(
+                "comprador-1",
+                "instrumento-1",
+                LadoOrden.COMPRA,
+                new BigDecimal("5")
+        );
+        Orden ventaLimite = crearOrden(
+                "instrumento-1", LadoOrden.VENTA, "95"
+        );
+
+        assertTrue(servicio.sonCompatibles(compraMercado, ventaLimite));
+
+        Transaccion tx = servicio.emparejar(compraMercado, ventaLimite, null);
+        assertEquals(0, new BigDecimal("95").compareTo(tx.precioEjecucion()));
     }
 }
