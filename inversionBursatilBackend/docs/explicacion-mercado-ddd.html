@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Mercado · qué hace el código y por qué es DDD</title>
+<style>
+  @page { size: A4; margin: 16mm 16mm 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: #1c2430;
+    font-family: "Segoe UI", Calibri, sans-serif;
+    font-size: 11.5pt;
+    line-height: 1.45;
+  }
+  h1 { font-size: 22pt; line-height: 1.15; margin: 0 0 6px; }
+  h2 {
+    font-size: 14.5pt;
+    margin: 22px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #1f4e79;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 12pt; margin: 14px 0 4px; page-break-after: avoid; }
+  p { margin: 0 0 8px; }
+  .kicker {
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    font-size: 9pt;
+    color: #1f4e79;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .lead { font-size: 12pt; color: #334155; }
+  .meta {
+    margin-top: 10px;
+    background: #f4f7fb;
+    border-left: 4px solid #1f4e79;
+    padding: 8px 12px;
+    font-size: 10.5pt;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 10.5pt; }
+  th, td { border: 1px solid #d5deea; padding: 6px 8px; vertical-align: top; text-align: left; }
+  th { background: #1f4e79; color: white; font-weight: 600; }
+  tr { page-break-inside: avoid; }
+  code, .mono { font-family: Consolas, "Courier New", monospace; font-size: 10pt; }
+  .card, .step, .why {
+    page-break-inside: avoid;
+    border: 1px solid #d5deea;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 0 0 8px;
+    background: #fff;
+  }
+  .card b, .step b { color: #1f4e79; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .agg {
+    border: 2px solid #1f4e79;
+    border-radius: 8px;
+    padding: 10px;
+    margin: 8px 0 12px;
+    page-break-inside: avoid;
+  }
+  .agg .label { font-size: 9pt; font-weight: 700; color: #1f4e79; text-transform: uppercase; }
+  .inside { background: #f4f7fb; border-radius: 6px; padding: 8px; margin-top: 6px; }
+  ol { margin: 6px 0 10px 18px; padding: 0; }
+  li { margin-bottom: 4px; }
+  .note { font-size: 10pt; color: #475569; }
+  .footer-note { margin-top: 16px; font-size: 9.5pt; color: #64748b; }
+</style>
+</head>
+<body>
+
+<p class="kicker">G1 · Ingeniería de Software II · Dev 1 William</p>
+<h1>Qué hace hoy el código de Mercado, y por qué es DDD</h1>
+<p class="lead">Esta nota describe el paquete <span class="mono">com.g1.trading.mercado</span> tal como está ahora: un catálogo de instrumentos con precio actual, histórico y simulación de precios. Todavía no hay pantallas, ni direcciones web, ni base de datos.</p>
+<div class="meta">
+  <b>Alcance actual.</b> Consultar instrumentos y sus precios (HU-01), consultar el histórico (HU-02) y simular la actualización periódica de precios (HU-08). Órdenes, emparejamiento y portafolio viven en otros paquetes y este código no los modela.
+</div>
+
+<h2>1. Qué puede hacer el programa en este momento</h2>
+<p>Alguien (en una prueba o en un <span class="mono">main</span> de práctica) usa objetos Java. El servidor Spring Boot puede arrancar, pero no ofrece un catálogo por el navegador. Toda la lógica útil está en el dominio.</p>
+
+<div class="grid">
+  <div class="card"><b>Registrar un instrumento.</b> Una acción o un ETF entra al catálogo con símbolo, nombre, precio inicial, instante y quién lo cargó.</div>
+  <div class="card"><b>Ver el precio vigente.</b> Cada instrumento responde con su cotización actual: valor, momento, origen y autor.</div>
+  <div class="card"><b>Ver el histórico.</b> La serie de cotizaciones queda ordenada en el tiempo. La consulta devuelve una copia, así nadie borra precios desde afuera.</div>
+  <div class="card"><b>Simular el mercado.</b> Un mismo factor (por ejemplo 1.02, un +2 %) y un mismo instante se aplican a todo el catálogo. Si un instrumento no puede actualizarse, no cambia ninguno.</div>
+</div>
+
+<h2>2. Qué clase se encarga de cada cosa</h2>
+<table>
+  <thead>
+    <tr><th>Si quieres…</th><th>Clase</th><th>Método o dato</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Crear un instrumento válido</td><td><span class="mono">InstrumentoFactory</span></td><td><span class="mono">registrar(símbolo, nombre, tipo, precio, momento, generadoPor)</span></td></tr>
+    <tr><td>Identificar el instrumento</td><td><span class="mono">InstrumentoId</span></td><td><span class="mono">valor()</span> — el símbolo, por ejemplo <span class="mono">AAPL</span>. Otros contextos guardan solo ese texto.</td></tr>
+    <tr><td>Decir si es acción o ETF</td><td><span class="mono">TipoInstrumento</span></td><td><span class="mono">ACCION</span> o <span class="mono">ETF</span></td></tr>
+    <tr><td>Representar un precio mayor a cero con hora</td><td><span class="mono">PrecioCotizado</span></td><td><span class="mono">valor</span> y <span class="mono">momento</span>. El constructor rechaza nulos, cero y negativos.</td></tr>
+    <tr><td>Saber el precio de ahora, quién lo puso y qué lo originó</td><td><span class="mono">Cotizacion</span></td><td><span class="mono">precio</span>, <span class="mono">origen</span>, <span class="mono">generadoPor</span></td></tr>
+    <tr><td>Nombrar el origen del cambio</td><td><span class="mono">OrigenCotizacion</span></td><td><span class="mono">CARGA_INICIAL</span> o <span class="mono">SIMULACION</span></td></tr>
+    <tr><td>Guardar la serie de precios</td><td><span class="mono">HistoricoPrecios</span></td><td><span class="mono">actual()</span> y <span class="mono">cotizaciones()</span></td></tr>
+    <tr><td>Proteger las reglas del instrumento</td><td><span class="mono">Instrumento</span></td><td><span class="mono">actualizarPrecio</span>, <span class="mono">obtenerCotizacionActual</span>, <span class="mono">consultarHistorico</span></td></tr>
+    <tr><td>Mover los precios de todo el catálogo</td><td><span class="mono">SimulacionPreciosService</span></td><td><span class="mono">simular(catálogo, factor, momento, generadoPor)</span></td></tr>
+    <tr><td>Recordar el vocabulario del contexto</td><td><span class="mono">LenguajeUbicuoMercado</span></td><td><span class="mono">terminos()</span></td></tr>
+  </tbody>
+</table>
+<p class="note"><span class="mono">TradingApiApplication</span> solo enciende el esqueleto de Spring Boot. No contiene reglas de negocio.</p>
+
+<h2>3. Un ejemplo, de principio a fin</h2>
+<ol>
+  <li>La factory registra Apple: símbolo <span class="mono">AAPL</span>, tipo <span class="mono">ACCION</span>, precio 100, un instante y el autor <span class="mono">admin-mercado</span>.</li>
+  <li><span class="mono">PrecioCotizado</span> comprueba que 100 es mayor a cero y que hay marca de tiempo. <span class="mono">InstrumentoId</span> deja el símbolo en mayúsculas, de 1 a 5 letras.</li>
+  <li>Nace un <span class="mono">Instrumento</span> cuya cotización actual tiene origen <span class="mono">CARGA_INICIAL</span>. El histórico tiene una sola entrada.</li>
+  <li><span class="mono">obtenerCotizacionActual()</span> responde esa cotización. <span class="mono">consultarHistorico()</span> devuelve la serie. Esa es la lectura del catálogo: no hace falta el motor de órdenes.</li>
+  <li><span class="mono">SimulacionPreciosService</span> recibe una lista de instrumentos, el factor 1.02 y un instante posterior. Calcula primero todos los precios nuevos. Solo si todos son válidos llama a <span class="mono">actualizarPrecio</span> con origen <span class="mono">SIMULACION</span>.</li>
+  <li>Apple queda en 102. El histórico pasa a tener dos cotizaciones. Si otro instrumento del mismo lote no puede avanzar en el tiempo, Apple tampoco cambia.</li>
+</ol>
+
+<h2>4. El límite del agregado</h2>
+<p>El agregado es el grupo de objetos que se protegen juntos. La raíz es <span class="mono">Instrumento</span>. Desde afuera no se arma un instrumento a mano: el constructor no es público y la factory es la puerta de entrada. Tampoco se edita el histórico por su cuenta: <span class="mono">registrar</span> solo es visible dentro del paquete, y la lista que se consulta es una copia.</p>
+<div class="agg">
+  <div class="label">Agregado · raíz Instrumento</div>
+  <div class="inside">
+    <b>Instrumento</b> guarda <span class="mono">InstrumentoId</span>, nombre y <span class="mono">TipoInstrumento</span>.<br />
+    Dentro vive <b>HistoricoPrecios</b>, una lista de <b>Cotizacion</b>.<br />
+    Cada cotización lleva un <b>PrecioCotizado</b> (valor + momento), un <b>OrigenCotizacion</b> y el id de quien la generó.
+  </div>
+</div>
+<p>Reglas que la raíz no deja romper: siempre hay al menos un precio válido; un precio nuevo tiene un instante posterior al último; el valor del precio es mayor a cero; cada cambio dice quién y qué lo produjo.</p>
+
+<h2>5. Por qué este diseño es DDD</h2>
+<p>Domain-Driven Design organiza el código alrededor del negocio, no alrededor de pantallas ni de tablas. En la lección 3 eso se practica con cinco elementos tácticos. Este paquete los tiene, y además respeta el límite del contexto Mercado.</p>
+
+<div class="why">
+  <h3>Lenguaje ubicuo</h3>
+  <p>Las clases y los métodos se llaman como habla el dominio: instrumento, precio cotizado, cotización, histórico de precios, simulación de precios. No aparecen nombres genéricos como <span class="mono">Asset</span>, <span class="mono">PriceDTO</span> o <span class="mono">updateRow</span>. Dentro de Mercado, “cotización” significa una sola cosa: el precio vigente con su trazabilidad. <span class="mono">LenguajeUbicuoMercado</span> deja ese glosario escrito.</p>
+</div>
+<div class="why">
+  <h3>Value objects</h3>
+  <p><span class="mono">PrecioCotizado</span>, <span class="mono">InstrumentoId</span> y <span class="mono">Cotizacion</span> son <span class="mono">record</span>. No tienen identidad propia: dos precios de 100 en el mismo instante son el mismo valor. La validación está en el constructor compacto, así que es imposible construir un precio de cero y pasarlo de largo. Se comparan por su contenido, que es el comportamiento natural de un <span class="mono">record</span>.</p>
+</div>
+<div class="why">
+  <h3>Agregado y su raíz</h3>
+  <p><span class="mono">Instrumento</span> es una entidad: dos instrumentos con el mismo <span class="mono">InstrumentoId</span> son el mismo, aunque el precio haya cambiado. La raíz es el único objeto que el resto del programa usa para leer o cambiar precios. El histórico queda detrás de esa raíz. Eso es el límite del agregado: las invariantes se defienden en un solo lugar.</p>
+</div>
+<div class="why">
+  <h3>Factory</h3>
+  <p><span class="mono">InstrumentoFactory</span> concentra el alta en el catálogo. Normaliza el símbolo, exige nombre, tipo y autor, arma el <span class="mono">PrecioCotizado</span> inicial y la cotización de carga, y entrega un instrumento que ya cumple las reglas. Crear el objeto y validarlo no quedan repartidos en cada llamada.</p>
+</div>
+<div class="why">
+  <h3>Servicio de dominio</h3>
+  <p>Subir el precio de Apple sí cabe dentro de <span class="mono">Instrumento.actualizarPrecio</span>. Aplicar el mismo factor, en el mismo instante, a todo el catálogo, y abortar el lote completo si uno falla, no es responsabilidad de un solo instrumento. Por eso existe <span class="mono">SimulacionPreciosService</span>. Es una clase Java normal: no tiene anotaciones de Spring ni habla con órdenes o portafolio.</p>
+</div>
+<div class="why">
+  <h3>Contexto delimitado</h3>
+  <p>Mercado es un bounded context. Su vocabulario no se mezcla con el de órdenes (precio límite, emparejamiento) ni con el de portafolio (posición, cantidad). Cuando otro contexto necesite un instrumento, guarda el <span class="mono">String</span> de <span class="mono">InstrumentoId.valor()</span>. No guarda el objeto <span class="mono">Instrumento</span>. Por eso el catálogo se puede consultar aunque el motor de emparejamiento no exista todavía.</p>
+</div>
+
+<h2>6. Cómo reconocerlo al leer el código</h2>
+<ul>
+  <li>Si la clase es un <span class="mono">record</span> y valida en el constructor, es un value object.</li>
+  <li>Si la clase tiene identidad (<span class="mono">equals</span> por el id) y métodos que cambian su estado con reglas, es la raíz del agregado.</li>
+  <li>Si una clase solo existe para construir esa raíz, es la factory.</li>
+  <li>Si una operación necesita varios instrumentos a la vez, es un servicio de dominio.</li>
+  <li>Si una lista sale con <span class="mono">List.copyOf</span>, la consulta no puede romper el agregado.</li>
+</ul>
+
+<p class="footer-note">Paquete <span class="mono">com.g1.trading.mercado</span> · rama rama-mercado · las pruebas de estas reglas están en <span class="mono">src/test/java/com/g1/trading/mercado</span> y se ejecutan con <span class="mono">mvn test</span>.</p>
+</body>
+</html>
