@@ -44,3 +44,7 @@ Endpoints actuales (`/instrumentos`):
 
 Invariantes del dominio: precio siempre > 0 con marca de tiempo; el histórico solo crece hacia adelante; cada cotización indica origen (`CARGA_INICIAL` / `SIMULACION`) y quién la generó; la simulación valida el lote completo antes de guardar.
 
+
+
+Hasta el commit actual donde aparece este mensaje, los endpoints se encuentran funcionales y ya hay un merge de las ramas de los 3 desarrolladores, se procederá
+a seguir con microservicios
