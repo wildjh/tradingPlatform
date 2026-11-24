@@ -1,0 +1,41 @@
+services:
+  mercado-db:
+    image: postgres:16-alpine
+    container_name: tradesim-mercado-db
+    environment:
+      POSTGRES_DB: mercado_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - mercado_data:/var/lib/postgresql/data
+
+  ordenes-db:
+    image: postgres:16-alpine
+    container_name: tradesim-ordenes-db
+    environment:
+      POSTGRES_DB: ordenes_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - ordenes_data:/var/lib/postgresql/data
+
+  portafolio-db:
+    image: postgres:16-alpine
+    container_name: tradesim-portafolio-db
+    environment:
+      POSTGRES_DB: portafolio_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5435:5432"
+    volumes:
+      - portafolio_data:/var/lib/postgresql/data
+
+volumes:
+  mercado_data:
+  ordenes_data:
+  portafolio_data:
