@@ -1,35 +1,38 @@
 package com.g1.trading.portafolio.web;
 
-import com.g1.trading.mercado.persistencia.CotizacionEntity;
-import com.g1.trading.mercado.persistencia.CotizacionJpaRepository;
-import com.g1.trading.mercado.persistencia.InstrumentoJpaRepository;
+import com.g1.trading.mercado.aplicacion.InstrumentoUseCase;
+import com.g1.trading.mercado.dominio.Instrumento;
 import com.g1.trading.portafolio.PortafolioService;
 import com.g1.trading.portafolio.ResumenPortafolio;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Adaptador HTTP de Portafolio.
+ * Para precios y existencia de instrumentos usa el puerto primario de Mercado
+ * ({@link InstrumentoUseCase}), nunca las clases JPA de Mercado.
+ */
 @RestController
 @RequestMapping("/api/portafolio")
 public class PortafolioController {
 
     private final PortafolioService portafolioService;
-    private final InstrumentoJpaRepository instrumentoRepo;
-    private final CotizacionJpaRepository cotizacionRepo;
+    private final InstrumentoUseCase instrumentoUseCase;
 
-    public PortafolioController(
-            PortafolioService portafolioService,
-            InstrumentoJpaRepository instrumentoRepo,
-            CotizacionJpaRepository cotizacionRepo
-    ) {
+    public PortafolioController(PortafolioService portafolioService, InstrumentoUseCase instrumentoUseCase) {
         this.portafolioService = portafolioService;
-        this.instrumentoRepo = instrumentoRepo;
-        this.cotizacionRepo = cotizacionRepo;
+        this.instrumentoUseCase = instrumentoUseCase;
     }
 
     public record PosicionResponse(
@@ -39,21 +42,24 @@ public class PortafolioController {
             BigDecimal precioActual,
             BigDecimal valorActual,
             BigDecimal gananciaNoRealizada
-    ) {}
+    ) {
+    }
 
     public record PortafolioResponse(
             String inversionistaId,
             List<PosicionResponse> posiciones,
             BigDecimal valorTotal,
             BigDecimal gananciaNoRealizada
-    ) {}
+    ) {
+    }
 
     public record CargarPosicionRequest(
             String inversionistaId,
             String instrumentoId,
             BigDecimal cantidad,
             BigDecimal precio
-    ) {}
+    ) {
+    }
 
     @GetMapping("/{inversionistaId}")
     public ResponseEntity<PortafolioResponse> consultarPortafolio(@PathVariable String inversionistaId) {
@@ -89,7 +95,7 @@ public class PortafolioController {
             throw new IllegalArgumentException("El instrumento es obligatorio");
         }
         String simbolo = req.instrumentoId().trim().toUpperCase();
-        if (!instrumentoRepo.existsById(simbolo)) {
+        if (!existeEnCatalogo(simbolo)) {
             throw new IllegalArgumentException("Instrumento no registrado en el catálogo: " + simbolo);
         }
 
@@ -104,13 +110,20 @@ public class PortafolioController {
                 .body(consultarPortafolio(req.inversionistaId()).getBody());
     }
 
+    /** HU-01 vía puerto de Mercado: mapa símbolo → precio vigente. */
     private Map<String, BigDecimal> obtenerPreciosActuales() {
         Map<String, BigDecimal> precios = new HashMap<>();
-        instrumentoRepo.findAll().forEach(inst ->
-                cotizacionRepo.findFirstByInstrumentoIdOrderByMomentoDesc(inst.getId())
-                        .map(CotizacionEntity::getPrecio)
-                        .ifPresent(precio -> precios.put(inst.getId(), precio))
-        );
+        for (Instrumento instrumento : instrumentoUseCase.listarConCotizacionActual()) {
+            precios.put(
+                    instrumento.id().valor(),
+                    instrumento.obtenerCotizacionActual().precio().valor()
+            );
+        }
         return precios;
+    }
+
+    private boolean existeEnCatalogo(String simbolo) {
+        return instrumentoUseCase.listarConCotizacionActual().stream()
+                .anyMatch(instrumento -> instrumento.id().valor().equals(simbolo));
     }
 }
