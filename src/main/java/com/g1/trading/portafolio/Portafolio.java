@@ -30,6 +30,18 @@ public final class Portafolio {
         this.inversionistaId = inversionistaId;
     }
 
+    public static Portafolio reconstruir(InversionistaId inversionistaId, List<Posicion> posicionesGuardadas) {
+        Portafolio p = new Portafolio(inversionistaId);
+        if (posicionesGuardadas != null) {
+            for (Posicion pos : posicionesGuardadas) {
+                p.posiciones.put(pos.instrumentoId(), new Posicion(pos.instrumentoId(), pos.cantidad(), pos.costoPromedio()));
+            }
+        }
+        return p;
+    }
+
+
+
     public void registrarCompra(InstrumentoId instrumentoId, Cantidad cantidad, BigDecimal precio) {
         exigirOperacionValida(instrumentoId, cantidad, precio);
         posiciones.computeIfAbsent(instrumentoId,
