@@ -28,6 +28,10 @@ public final class Posicion {
         this.costoPromedio = costoPromedio.setScale(DECIMALES, RoundingMode.HALF_UP);
     }
 
+    public static Posicion reconstruir(InstrumentoId instrumentoId, BigDecimal cantidad, BigDecimal costoPromedio) {
+        return new Posicion(instrumentoId, Cantidad.de(cantidad), costoPromedio);
+    }
+
     void agregarCompra(Cantidad comprada, BigDecimal precio) {
         Cantidad total = cantidad.sumar(comprada);
         BigDecimal costoViejo = costoPromedio.multiply(cantidad.valor());
